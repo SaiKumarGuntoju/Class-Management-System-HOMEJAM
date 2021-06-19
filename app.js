@@ -1,3 +1,7 @@
+/* Assumptions => 
+assumed database : "database.db"
+Tables : student_table,instructor_table,teachers_table,class_table; */
+
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const path = require("path");
@@ -90,7 +94,7 @@ app.post("/register/", async (request, response) => {
   }
 });
 
-//login the user
+//login the instructor
 
 app.post("/login/", async (request, response) => {
   const { username, password } = request.body;
@@ -200,6 +204,9 @@ app.put("/classes/:classId",authenticateTokenForInstructor, async (request,respo
     }    
 })
 
+/* API TO DELETE THE CLASS (Only the Owner of the class can 
+    have the permission to delete the class) */
+
 app.delete("classes/:classId",authenticateTokenForInstructor, async(request,response) => {
     const {classId} = request.params;
     const {username} = request;
@@ -288,7 +295,7 @@ const authenticateTokenForTeacher = (request, response, next) => {
     }
   });
   
-  //login the Teacher
+  //login  API for the Teacher
   
   app.post("/login/", async (request, response) => {
     const { username, password } = request.body;
