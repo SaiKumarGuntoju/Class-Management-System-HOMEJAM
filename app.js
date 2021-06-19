@@ -4,6 +4,8 @@ const path = require("path");
 const bcrypt = require("bcrypt");
 const sqlite3 = require("sqlite3");
 const { open } = require("sqlite");
+const { DefaultDeserializer } = require("v8");
+const { isUndefined } = require("util");
 
 const app = express();
 app.use(express.json());
@@ -28,7 +30,7 @@ initializeDBAndServer();
 
 //middleware function
 
-const authenticateToken = (request, response, next) => {
+const authenticateTokenForInstructor = (request, response, next) => {
   let jwtToken;
   const authHeader = request.headers["authorization"];
   if (authHeader !== undefined) {
@@ -46,6 +48,7 @@ const authenticateToken = (request, response, next) => {
         response.status(401);
         response.send("Invalid JWT Token");
       } else {
+          request.username = payload.username
         next();
       }
     });
@@ -55,11 +58,11 @@ const authenticateToken = (request, response, next) => {
 //registering the instructor
 
 app.post("/register/", async (request, response) => {
-  const { username, password, name, instructorId } = request.body;
+  const { username, password, name ,gender } = request.body;
   const isInstructorRegisteredQuery = `
             SELECT *
-            FROM user
-            WHERE username = '${username}';`;
+            FROM instructor_table
+            WHERE instructor_name = '${username}';`;
   const isInstructorRegistered = await database.get(
     isInstructorRegisteredQuery
   );
@@ -71,7 +74,7 @@ app.post("/register/", async (request, response) => {
       const hashedPassword = await bcrypt.hash(password, 10);
       const createInstructorQuery = `
             INSERT INTO user
-            (name,username,password,instructorId)
+            (name,username,password,gender)
             VALUES 
            ( '${name}',
            '${username}',
@@ -93,8 +96,8 @@ app.post("/login/", async (request, response) => {
   const { username, password } = request.body;
   const isInstructorFoundQuery = `
             SELECT * 
-            FROM user
-            WHERE username = '${username}';`;
+            FROM instructor_table
+            WHERE instructor_name = '${username}';`;
   const isInstructorFound = await database.get(isInstructorFoundQuery);
   if (isInstructorFound === undefined) {
     response.status(400);
@@ -123,7 +126,7 @@ app.post("/login/", async (request, response) => {
 //API TO CREATE NEW CLASS 
 
 
-app.post("/classes/", async (request,response) =>{
+app.post("/classes/",authenticateTokenForInstructor, async (request,response) =>{
     const {class_id,class_name,instructor_name,instructor_id} = request.body;
     const isClassAlreadyExit = `
         SELECT *
@@ -147,33 +150,80 @@ app.post("/classes/", async (request,response) =>{
 
 //API TO GET THE DETAILS OF THE CLASS
 
-app.get("/classes/:classId", async (request,response) => {
+app.get("/classes/:classId",authenticateTokenForInstructor, async (request,response) => {
     const {classId} = request.params;
     const getClassDetailsQuery = `
         SELECT *
         FROM class_table
         WHERE class_id = ${classId};`;
     const classDetails = database.get(getClassDetailsQuery);
-    response.status(200)
-    response.send(classDetails)
+    if (classDetails === undefined){
+        response.status(400)
+        response.send("Invalid ClassId")
+    }else(
+        response.status(200)
+        response.send(classDetails)
+    )
 })
 
 //API TO UPDATE THE DETAILS OF THE CLASS
 
-app.put("/classes/:classId", async (request,response) => {
+app.put("/classes/:classId",authenticateTokenForInstructor, async (request,response) => {
     const {classId} = request.params;
+    const {username} = request;
     const {class_name,instructor_name,instructor_id} = request.body;
-    const UpdateClassQuery = `
-        UPDATE class_table
-        SET 
-            class_name = ${class_name},
-            instructor_name = '${instructor_name}',
-            instructor_id = ${instructor_id} 
+    const isClassExists = `
+        SELECT *
+        FROM class_table
         WHERE class_id = ${classId};`;
-    await database.run(UpdateClassQuery);
-    response.status(200);
-    response.send(`Class Details of ${classId} are Successfully Updated`);
-        
+    const isClassFound = await database.get(isClassExists); 
+    
+    if(isClassFound === undefined){
+        response.status(400);
+        response.send("Invalid ClassId")
+    }else{
+        if (username === isClassFound.instructor_name){
+            const UpdateClassQuery = `
+                UPDATE class_table
+                SET 
+                    class_name = ${class_name},
+                    instructor_name = '${instructor_name}',
+                    instructor_id = ${instructor_id} 
+                WHERE class_id = ${classId};`;
+            await database.run(UpdateClassQuery);
+            response.status(200);
+            response.send(`Class Details of ${classId} are Successfully Updated`);
+        }else{
+            response.status(401);
+            response.send("Permisson Denied to Update (Ownership Mismatched)")
+        }
+    }    
+})
+
+app.delete("classes/:classId",authenticateTokenForInstructor, async(request,response) => {
+    const {classId} = request.params;
+    const {username} = request;
+    const isClassExists = `
+        SELECT *
+        FROM class_table
+        WHERE class_id = ${classId};`;
+    const isClassFound = await database.get(isClassExists);
+    if (isClassFound === Undefined){
+        response.status(400)
+        response.send("Invalid classId")
+    }else{
+        if (username === isClassFound.instructor_name){
+            const deleteQuery = `
+                DELETE FROM class_table
+                WHERE class_id = ${classId};`;
+            await database.run(deleteQuery);
+            response.status(200);
+            response.send(`Class with ID ${classId} is Successfully Deleted`)
+        }else{
+            response.status(401);
+            response.send("Permisson Denied to Update (Ownership Mismatched)")
+        }
+    }
 })
 
 
