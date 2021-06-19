@@ -145,6 +145,8 @@ app.post("/classes/", async (request,response) =>{
     }
 });
 
+//API TO GET THE DETAILS OF THE CLASS
+
 app.get("/classes/:classId", async (request,response) => {
     const {classId} = request.params;
     const getClassDetailsQuery = `
@@ -155,6 +157,28 @@ app.get("/classes/:classId", async (request,response) => {
     response.status(200)
     response.send(classDetails)
 })
+
+//API TO UPDATE THE DETAILS OF THE CLASS
+
+app.put("/classes/:classId", async (request,response) => {
+    const {classId} = request.params;
+    const {class_name,instructor_name,instructor_id} = request.body;
+    const UpdateClassQuery = `
+        UPDATE class_table
+        SET 
+            class_name = ${class_name},
+            instructor_name = '${instructor_name}',
+            instructor_id = ${instructor_id} 
+        WHERE class_id = ${classId};`;
+    await database.run(UpdateClassQuery);
+    response.status(200);
+    response.send(`Class Details of ${classId} are Successfully Updated`);
+        
+})
+
+
+
+
 
 //CRUD endpoints for teacher to manage
 //student participating in the Class
